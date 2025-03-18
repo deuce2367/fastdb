@@ -105,9 +105,9 @@ def download_file(filename: str, request: Request):
         file_mod_time = os.path.getmtime(file_path)
         file_age_seconds = time.time() - file_mod_time
         start_time = time.time()
-        
+
         response = FileResponse(file_path, filename=filename)
-        
+
         transfer_time = time.time() - start_time
         throughput_mbps = (file_size / (1024 * 1024)) / transfer_time if transfer_time > 0 else 0
 
@@ -130,7 +130,7 @@ def download_file(filename: str, request: Request):
         db.add(DownloadLog(filename=filename, status='not found', ip_address=ip_address, user_agent=user_agent))
         db.commit()
         db.close()
-        
+
         if history:
             raise HTTPException(status_code=404, detail=f"File '{filename}' not found, but was previously downloaded.")
         else:
