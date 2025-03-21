@@ -19,7 +19,9 @@ DOWNLOAD_COUNTER = Counter("file_downloads", "Count of file downloads", ["filena
 ERROR_COUNTER = Counter("errors", "Count of errors", ["type"])
 RABBITMQ_MESSAGE_COUNTER = Counter("rabbitmq_messages", "Count of RabbitMQ messages received")
 
+# ---------------------------------------------------------------------------------------
 # Database setup
+#
 DATABASE_URL = "sqlite:///./downloads.db"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -45,6 +47,9 @@ class FilenameRegistry(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 Base.metadata.create_all(bind=engine)
+# ---------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------
 
 STATIC_DIR = "./static"
 
