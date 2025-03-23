@@ -27,7 +27,7 @@ RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
 # Copy the application code to the working directory
-COPY . .
+COPY --chown=${user}:${user} . .
 
 # Expose the port on which the application will run
 EXPOSE 8080
