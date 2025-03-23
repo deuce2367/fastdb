@@ -19,9 +19,7 @@ DOWNLOAD_COUNTER = Counter("file_downloads", "Count of file downloads", ["filena
 ERROR_COUNTER = Counter("errors", "Count of errors", ["type"])
 RABBITMQ_MESSAGE_COUNTER = Counter("rabbitmq_messages", "Count of RabbitMQ messages received")
 
-# ---------------------------------------------------------------------------------------
 # Database setup
-#
 DATABASE_URL = "sqlite:///./downloads.db"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -47,9 +45,6 @@ class FilenameRegistry(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 Base.metadata.create_all(bind=engine)
-# ---------------------------------------------------------------------------------------
-# ---------------------------------------------------------------------------------------
-# ---------------------------------------------------------------------------------------
 
 STATIC_DIR = "./static"
 
@@ -80,10 +75,8 @@ async def start_rabbitmq_consumer():
     while True:
         try:
             loop = asyncio.get_event_loop()
-            connection = await pika.adapters.asyncio_connection.AsyncioConnection.create(
-                pika.ConnectionParameters('localhost'),
-                loop=loop
-            )
+            connection_params = pika.URLParameters(RABBITMQ_URL)
+            connection = await loop.create_connection(lambda: pika.adapters.asyncio_connection.AsyncioConnection(connection_params), connection_params.host) 
             channel = await connection.channel()
             await channel.queue_declare(queue=QUEUE_NAME)
             await channel.basic_consume(queue=QUEUE_NAME, on_message_callback=on_message_received)
@@ -91,8 +84,7 @@ async def start_rabbitmq_consumer():
             await asyncio.Future()  # Keeps the consumer alive
         except Exception as e:
             logging.error(f"RabbitMQ connection error: {e}")
-            ERROR_COUNTER.labels(type="rabbitmq_connection").inc()
-            await asyncio.sleep(5)  # Retry after a brief delay
+            ERROR_COUNTER.labels(type="rabbitmq_connection")
 
 @app.on_event("startup")
 async def startup_event():
