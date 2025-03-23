@@ -71,24 +71,80 @@ def on_message_received(ch, method, properties, body):
         ERROR_COUNTER.labels(type="rabbitmq_message_processing").inc()
         ch.basic_nack(delivery_tag=method.delivery_tag)
 
+def on_connection_open(conn):
+    global connection
+    connection = conn
+    connection.channel(on_open_callback=on_channel_open)
+
+def on_channel_open(ch):
+    global channel
+    channel = ch
+    # Declare the queue explicitly with durable and non-exclusive options
+    channel.queue_declare(
+        queue=QUEUE_NAME,
+        durable=True,  # Ensure the queue survives server restarts
+        exclusive=False,  # Make the queue available to all connections
+        auto_delete=False  # Prevent automatic deletion of the queue
+    )
+    channel.basic_consume(queue=QUEUE_NAME, on_message_callback=on_message_received)
+    logging.info("[*] Waiting for messages...")
+
 async def start_rabbitmq_consumer():
     while True:
         try:
-            loop = asyncio.get_event_loop()
             connection_params = pika.URLParameters(RABBITMQ_URL)
-            connection = await loop.create_connection(lambda: pika.adapters.asyncio_connection.AsyncioConnection(connection_params), connection_params.host) 
-            channel = await connection.channel()
-            await channel.queue_declare(queue=QUEUE_NAME)
-            await channel.basic_consume(queue=QUEUE_NAME, on_message_callback=on_message_received)
-            print("[*] Waiting for messages from RabbitMQ...")
-            await asyncio.Future()  # Keeps the consumer alive
+            connection = pika.adapters.asyncio_connection.AsyncioConnection(connection_params)
+            connection.add_on_open_callback(on_connection_open)
+            await asyncio.Future()  # Keeps the consumer running
         except Exception as e:
             logging.error(f"RabbitMQ connection error: {e}")
-            ERROR_COUNTER.labels(type="rabbitmq_connection")
+            await asyncio.sleep(5)  # Retry after delay
+
 
 @app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(start_rabbitmq_consumer())
+async def startup():
+    """Start RabbitMQ consumer when FastAPI app starts."""
+    global consumer_task
+    consumer_task = asyncio.create_task(start_rabbitmq_consumer())
+    logging.info("RabbitMQ consumer started.")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    """Gracefully shut down the RabbitMQ connection and consumer."""
+    global connection, channel, consumer_task
+
+    logging.info("FastAPI shutdown initiated.")
+
+    # Cancel the consumer task
+    logging.info("task cleanup")
+    if consumer_task:
+        logging.info("cancel consumer_task")
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except asyncio.CancelledError:
+            logging.info("RabbitMQ consumer task canceled.")
+
+    # Close the RabbitMQ channel and connection
+    logging.info("channel cleanup")
+    if channel:
+        try:
+            channel.close()
+            logging.info("RabbitMQ channel closed.")
+        except Exception as e:
+            logging.error(f"Error closing RabbitMQ channel: {e}")
+
+    logging.info("connection cleanup")
+    if connection:
+        try:
+            connection.close()
+            logging.info("RabbitMQ connection closed.")
+        except Exception as e:
+            logging.error(f"Error closing RabbitMQ connection: {e}")
+
+    logging.info("RMQ shutdown complete")
+
 
 @app.get("/download/{filename}")
 def download_file(filename: str, request: Request):
