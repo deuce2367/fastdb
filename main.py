@@ -54,7 +54,7 @@ Base.metadata.create_all(bind=engine)
 STATIC_DIR = "./static"
 
 # RabbitMQ Configuration
-RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'
+RABBITMQ_URL = 'amqp://user:bitnami@localhost:5672/'
 QUEUE_NAME = 'file_queue'
 
 def on_message_received(ch, method, properties, body):
