@@ -11,8 +11,20 @@ import os
 import time
 import logging
 
+# Application logging setup
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Create a handler that prints to the console
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+
 # FastAPI app setup with Swagger docs enabled
 app = FastAPI(title="File Download Service", description="A FastAPI service for managing file downloads and logging", version="1.0")
+logging.info("FastAPI APP created, Swagger enabled at /docs URL")
 
 # Prometheus Metrics
 DOWNLOAD_COUNTER = Counter("file_downloads", "Count of file downloads", ["filename"])
@@ -54,7 +66,8 @@ QUEUE_NAME = 'file_queue'
 
 def on_message_received(ch, method, properties, body):
     try:
-        print(f"Received message from RabbitMQ: {body.decode()}")
+        logging.info(f"***** Received message from RabbitMQ: {body.decode()}")
+        print(f"***** Received message from RabbitMQ: {body.decode()}")
         RABBITMQ_MESSAGE_COUNTER.inc()
 
         db = SessionLocal()
@@ -75,6 +88,7 @@ def on_connection_open(conn):
     global connection
     connection = conn
     connection.channel(on_open_callback=on_channel_open)
+    logging.info(f"RMQ connection opened...")
 
 def on_channel_open(ch):
     global channel
@@ -87,7 +101,7 @@ def on_channel_open(ch):
         auto_delete=False  # Prevent automatic deletion of the queue
     )
     channel.basic_consume(queue=QUEUE_NAME, on_message_callback=on_message_received)
-    logging.info("[*] Waiting for messages...")
+    logging.info(f"[*] Channel opened, waiting for RMQ messages on {QUEUE_NAME}...")
 
 async def start_rabbitmq_consumer():
     while True:
@@ -96,6 +110,7 @@ async def start_rabbitmq_consumer():
             connection = pika.adapters.asyncio_connection.AsyncioConnection(connection_params)
             connection.add_on_open_callback(on_connection_open)
             await asyncio.Future()  # Keeps the consumer running
+            logging.info(f"RMQ connection awaited...")
         except Exception as e:
             logging.error(f"RabbitMQ connection error: {e}")
             await asyncio.sleep(5)  # Retry after delay
@@ -148,6 +163,20 @@ async def shutdown():
 
 @app.get("/download/{filename}")
 def download_file(filename: str, request: Request):
+    """
+    Allows a client to download a file, if it is available.  Downloads are logged.  If file is not available
+    let the user know if it is a file we had at one point that has since been deleted.
+
+    Args:
+        filename (str): the name of the requested file
+
+    Returns:
+        FileResponse (the file, if it is available)
+
+    Raises:
+        HttpException: if the file is not available
+
+    """
     db = SessionLocal()
     file_path = os.path.join(STATIC_DIR, filename)
     ip_address = request.client.host

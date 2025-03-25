@@ -33,4 +33,4 @@ COPY --chown=${user}:${user} . .
 EXPOSE 8080
 
 # Run the FastAPI application using uvicorn server
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload", "--log-config", "log_config.yaml"]
